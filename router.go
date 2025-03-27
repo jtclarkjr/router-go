@@ -146,3 +146,8 @@ func URLParam(r *http.Request, key string) string {
 	}
 	return ""
 }
+
+// URLQuery retrieves a query parameter from the URL
+func URLQuery(r *http.Request, key string) string {
+	return r.URL.Query().Get(key)
+}

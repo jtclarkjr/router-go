@@ -39,7 +39,7 @@ func main() {
 
 // Example on how to use param in handler
 // Extract id using URLParam
-	itemId := router.URLParam(r, "id")
+itemId := router.URLParam(r, "id")
 ```
 
 ## Routing Features

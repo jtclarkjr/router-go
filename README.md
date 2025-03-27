@@ -35,6 +35,11 @@ func main() {
  fmt.Println("Starting server on :8080")
  log.Fatal(http.ListenAndServe(":8080", r))
 }
+
+
+// Example on how to use param in handler
+// Extract id using URLParam
+	itemId := router.URLParam(r, "id")
 ```
 
 ## Routing Features

@@ -1,7 +1,7 @@
 # Custom Go Router
 
 ## Overview
-This project implements a custom router with middleware support for a web application, providing flexible routing and request handling.
+This package implements a custom router with middleware support for a web application, providing flexible routing and request handling.
 
 ## Why?
 Q: Why not just use Chi for routing

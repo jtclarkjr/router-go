@@ -40,6 +40,17 @@ func main() {
 // Example on how to use param in handler
 // Extract id using URLParam
 itemId := router.URLParam(r, "id")
+
+```
+
+Two ways to use Query
+```go
+id := router.URLQuery(r, "id")
+// or
+func Handler(w http.ResponseWriter, r *http.Request) {
+  id := r.URL.Query().Get("id")
+}
+
 ```
 
 ## Routing Features

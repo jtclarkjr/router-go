@@ -49,7 +49,7 @@ Subroute example
 func main() {
   r := router.NewRouter()
 
-  r.Route("/admin", func(r *Router) {
+  r.Route("/admin", func(r *router.Router) {
     r.Get("/users", getUsersHandler)
     r.Post("/users", createUserHandler)
   })

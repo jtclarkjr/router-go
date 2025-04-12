@@ -31,6 +31,32 @@ func NewRouter() *Router {
 	}
 }
 
+// Route creates a subrouter for the given path prefix
+func (r *Router) Route(pathPrefix string, fn func(router *Router)) {
+	// Create a new subrouter
+	subrouter := &Router{
+		routes:     make(map[string]map[string]Route),
+		middleware: make([]Middleware, len(r.middleware)),
+	}
+
+	// Copy parent middleware
+	copy(subrouter.middleware, r.middleware)
+
+	// Execute the routing function on the subrouter
+	fn(subrouter)
+
+	// For each route in the subrouter, add it to the parent router with the prefix
+	for path, methods := range subrouter.routes {
+		fullPath := pathPrefix + path
+		for method, route := range methods {
+			if r.routes[fullPath] == nil {
+				r.routes[fullPath] = make(map[string]Route)
+			}
+			r.routes[fullPath][method] = route
+		}
+	}
+}
+
 // Use adds a middleware to the router
 func (r *Router) Use(mw Middleware) {
 	r.middleware = append(r.middleware, mw)

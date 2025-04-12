@@ -23,13 +23,14 @@ func main() {
 
  // Middlewares
  r.Use(middleware.Logger)
+ r.Use(middleware.Recoverer)
  r.Use(middleware.RateLimiter)
  r.Use(middleware.Throttle(5))
 
  // Food routes
- r.Get("/users", GetUsersHandler)
- r.Post("/user", controller.CreateUserHandler)
- r.Put("/users/{id}", controller.UpdateUserHandler)
+ r.Get("/users", getUsersHandler)
+ r.Post("/user", ceateUserHandler)
+ r.Put("/users/{id}", createUserHandler)
 
  // Start the HTTP server
  fmt.Println("Starting server on :8080")
@@ -40,6 +41,19 @@ func main() {
 // Example on how to use param in handler
 // Extract id using URLParam
 itemId := router.URLParam(r, "id")
+
+```
+
+Subroute example
+```go
+func main() {
+  r := router.NewRouter()
+
+  r.Route("/admin", func(r *Router) {
+    r.Get("/users", getUsersHandler)
+    r.Post("/users", createUserHandler)
+  })
+}
 
 ```
 

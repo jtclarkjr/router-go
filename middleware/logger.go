@@ -72,8 +72,18 @@ func getMethodColor(method string) string {
 		return "\033[36m" // Cyan for POST
 	case http.MethodPut:
 		return "\033[33m" // Yellow for PUT
+	case http.MethodPatch:
+		return "\033[35m" // Magenta for PATCH
 	case http.MethodDelete:
 		return "\033[31m" // Red for DELETE
+	case http.MethodHead:
+		return "\033[32m" // Green for HEAD
+	case http.MethodOptions:
+		return "\033[91m" // Bright red for OPTIONS
+	case http.MethodConnect:
+		return "\033[95m" // Bright magenta for CONNECT
+	case http.MethodTrace:
+		return "\033[96m" // Bright cyan for TRACE
 	default:
 		return "\033[0m" // Default color
 	}

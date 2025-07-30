@@ -36,14 +36,35 @@ func Logger(next http.Handler) http.Handler {
 		methodColor := getMethodColor(r.Method)
 		resetColor := "\033[0m"
 
-		// Log the request with colors and response time
-		log.Printf("%s%s%s %s%s%s from %s - %s%d%s in %s%s%s",
-			methodColor, r.Method, resetColor,
-			statusColor, r.URL.Path, resetColor,
-			r.RemoteAddr,
-			statusColor, wrappedWriter.StatusCode, resetColor,
-			durationColor, duration, resetColor,
-		)
+		// Check for error message in context
+		var errorMsg string
+		type ctxKey string
+		if v := r.Context().Value(ctxKey("envvar_error")); v != nil {
+			if s, ok := v.(string); ok && s != "" {
+				errorMsg = s
+			}
+		}
+
+		// Log the request with colors and response time, and error if present
+		if errorMsg != "" {
+			errorColor := "\033[31m" // Red
+			log.Printf("%s%s%s %s%s%s from %s - %s%d%s in %s%s%s | %sERROR: %s%s",
+				methodColor, r.Method, resetColor,
+				statusColor, r.URL.Path, resetColor,
+				r.RemoteAddr,
+				statusColor, wrappedWriter.StatusCode, resetColor,
+				durationColor, duration, resetColor,
+				errorColor, errorMsg, resetColor,
+			)
+		} else {
+			log.Printf("%s%s%s %s%s%s from %s - %s%d%s in %s%s%s",
+				methodColor, r.Method, resetColor,
+				statusColor, r.URL.Path, resetColor,
+				r.RemoteAddr,
+				statusColor, wrappedWriter.StatusCode, resetColor,
+				durationColor, duration, resetColor,
+			)
+		}
 	})
 }
 

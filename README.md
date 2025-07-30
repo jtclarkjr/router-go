@@ -75,10 +75,30 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 - Dynamic route parameters
 - Rate limiting and logging
 
+
 ## Middleware
 - Logger: Logs incoming requests
 - RateLimiter: Prevents excessive requests
 - Throttle: Limits concurrent requests
+- EnvVarChecker: Ensures required environment variables are set before handling requests
+
+### Example: Using EnvVarChecker Middleware
+
+```go
+import (
+    "github.com/jtclarkjr/router-go/middleware"
+    // ...other imports
+)
+
+func main() {
+    r := router.NewRouter()
+
+    // Check that required environment variables are set
+    r.Use(middleware.EnvVarChecker("DB_URL", "API_KEY"))
+
+    // ...other middleware and routes
+}
+```
 
 ## Requirements
 - Uses current latest Go version (1.24.1)

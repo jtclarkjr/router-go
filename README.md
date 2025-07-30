@@ -6,7 +6,7 @@ This package implements a custom router with middleware support for a web applic
 ## Why?
 Q: Why not just use Chi for routing
 
-A: Chi is really good and my favorite, but I was using custom routing per project that doesnt add extra things included in chi and just wanted to add it as a package to have in one place.
+A: Chi is really good and my favorite, but was using custom routing per project that doesnt add extra things included in chi and just wanted to add it as a package to have in one place.
 
 ## Installation
 

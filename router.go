@@ -140,25 +140,34 @@ func (r *Router) Trace(path string, handler http.HandlerFunc) {
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	for path, methods := range r.routes {
 		for method, route := range methods {
-			// Match exact paths or wildcard paths
-			if req.Method == method && (route.ParamPattern.MatchString(req.URL.Path) || strings.HasPrefix(req.URL.Path, strings.TrimSuffix(path, "*"))) {
-				// Extract parameters from the URL
-				matches := route.ParamPattern.FindStringSubmatch(req.URL.Path)
-				params := map[string]string{}
-				for i, key := range route.ParamKeys {
-					params[key] = matches[i+1]
-				}
+			if req.Method == method {
+				// Handle wildcard paths (ending with /*)
+				if strings.HasSuffix(path, "/*") {
+					prefixPath := strings.TrimSuffix(path, "/*")
+					if strings.HasPrefix(req.URL.Path, prefixPath) {
+						// Serve the request for wildcard match
+						route.Handler.ServeHTTP(w, req)
+						return
+					}
+				} else if route.ParamPattern.MatchString(req.URL.Path) {
+					// Handle parameterized paths
+					matches := route.ParamPattern.FindStringSubmatch(req.URL.Path)
+					params := map[string]string{}
+					for i, key := range route.ParamKeys {
+						params[key] = matches[i+1]
+					}
 
-				// Add parameters to the request context
-				ctx := req.Context()
-				for key, value := range params {
-					ctx = context.WithValue(ctx, key, value)
-				}
-				req = req.WithContext(ctx)
+					// Add parameters to the request context
+					ctx := req.Context()
+					for key, value := range params {
+						ctx = context.WithValue(ctx, key, value)
+					}
+					req = req.WithContext(ctx)
 
-				// Serve the request
-				route.Handler.ServeHTTP(w, req)
-				return
+					// Serve the request
+					route.Handler.ServeHTTP(w, req)
+					return
+				}
 			}
 		}
 	}

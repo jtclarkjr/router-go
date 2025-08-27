@@ -81,6 +81,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 - RateLimiter: Prevents excessive requests
 - Throttle: Limits concurrent requests
 - EnvVarChecker: Ensures required environment variables are set before handling requests
+- CORS: Handles Cross-Origin Resource Sharing with flexible configuration
 
 ### Example: Using EnvVarChecker Middleware
 
@@ -99,6 +100,139 @@ func main() {
     // ...other middleware and routes
 }
 ```
+
+### CORS Middleware
+
+The CORS middleware provides flexible configuration for handling Cross-Origin Resource Sharing.
+
+#### Simple CORS (Allow all origins)
+
+```go
+import (
+    "github.com/jtclarkjr/router-go/middleware"
+)
+
+func main() {
+    r := router.NewRouter()
+    
+    // Allow all origins with default settings
+    r.Use(middleware.SimpleCORS())
+    
+    // ...routes
+}
+```
+
+#### Strict CORS (Specific origins only)
+
+```go
+func main() {
+    r := router.NewRouter()
+    
+    // Only allow specific origins with credentials
+    r.Use(middleware.StrictCORS([]string{
+        "http://localhost:3000",
+        "https://app.example.com",
+    }))
+    
+    // ...routes
+}
+```
+
+#### Custom CORS Configuration
+
+```go
+func main() {
+    r := router.NewRouter()
+    
+    corsConfig := middleware.CORSConfig{
+        // Origins that are allowed (supports wildcards)
+        AllowedOrigins: []string{
+            "http://localhost:3000",
+            "https://example.com",
+            "https://*.mydomain.com",  // Wildcard support
+        },
+        
+        // HTTP methods that are allowed
+        AllowedMethods: []string{
+            http.MethodGet,
+            http.MethodPost,
+            http.MethodPut,
+            http.MethodDelete,
+            http.MethodOptions,
+        },
+        
+        // Headers that the client can send
+        AllowedHeaders: []string{
+            "Content-Type",
+            "Authorization",
+            "X-Requested-With",
+        },
+        
+        // Headers exposed to the client
+        ExposedHeaders: []string{
+            "X-Total-Count",
+            "X-Page-Number",
+        },
+        
+        // Cache preflight requests (in seconds)
+        MaxAge: 3600,
+        
+        // Allow cookies/credentials
+        AllowCredentials: true,
+        
+        // Let other handlers process OPTIONS
+        OptionsPassthrough: false,
+        
+        // Enable debug headers
+        Debug: true,
+    }
+    
+    r.Use(middleware.CORS(corsConfig))
+    
+    // ...routes
+}
+```
+
+#### CORS with Route Groups
+
+You can apply different CORS configurations to different route groups:
+
+```go
+func main() {
+    r := router.NewRouter()
+    
+    // Global CORS for all routes
+    r.Use(middleware.SimpleCORS())
+    
+    // Admin routes with stricter CORS
+    r.Route("/admin", func(admin *router.Router) {
+        adminCORS := middleware.CORSConfig{
+            AllowedOrigins:   []string{"https://admin.example.com"},
+            AllowedMethods:   []string{http.MethodGet, http.MethodPost},
+            AllowCredentials: true,
+        }
+        admin.Use(middleware.CORS(adminCORS))
+        
+        admin.Get("/dashboard", adminDashboardHandler)
+    })
+    
+    // Public API routes
+    r.Get("/api/public", publicAPIHandler)
+}
+```
+
+#### CORS Configuration Options
+
+| Option | Type | Description | Default |
+|--------|------|-------------|---------|
+| `AllowedOrigins` | `[]string` | List of allowed origins. Use `"*"` for all origins. Supports wildcards like `"https://*.example.com"` | `["*"]` |
+| `AllowedMethods` | `[]string` | HTTP methods allowed for CORS requests | `[GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS]` |
+| `AllowedHeaders` | `[]string` | Headers that can be used in requests. Use `"*"` for all headers | `["*"]` |
+| `ExposedHeaders` | `[]string` | Headers exposed to the client | `[]` |
+| `MaxAge` | `int` | How long (seconds) browsers can cache preflight responses | `0` |
+| `AllowCredentials` | `bool` | Allow cookies, authorization headers, or TLS client certificates | `false` |
+| `OptionsPassthrough` | `bool` | Pass OPTIONS requests to next handler instead of terminating | `false` |
+| `Debug` | `bool` | Add X-CORS-Debug headers for troubleshooting | `false` |
 
 ## Requirements
 - Uses current latest Go version (1.24.1)

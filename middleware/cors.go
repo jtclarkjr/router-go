@@ -211,10 +211,8 @@ func isOriginAllowed(origin string, allowedOrigins []string, wildcardOrigins []w
 	}
 
 	// Check exact matches
-	for _, allowed := range allowedOrigins {
-		if allowed == origin {
-			return true
-		}
+	if slices.Contains(allowedOrigins, origin) {
+		return true
 	}
 
 	// Check wildcard matches

@@ -3,8 +3,14 @@ package middleware
 import (
 	"log"
 	"net/http"
+	"os"
 	"time"
 )
+
+// LoggerConfig holds configuration options for the logger middleware
+type LoggerConfig struct {
+	IncludeTimestamp bool
+}
 
 // ResponseWriterWrapper wraps http.ResponseWriter to capture the status code
 type ResponseWriterWrapper struct {
@@ -18,54 +24,67 @@ func (rw *ResponseWriterWrapper) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
-// Middleware for logging requests with colorful output and response time
+// Middleware for logging requests with colorful output and response time (timestamp optional)
 func Logger(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now() // Start timing
-		wrappedWriter := &ResponseWriterWrapper{ResponseWriter: w, StatusCode: http.StatusOK}
+	return LoggerWithConfig(LoggerConfig{IncludeTimestamp: true})(next) // Default to including timestamps
+}
 
-		// Process the request
-		next.ServeHTTP(wrappedWriter, r)
-
-		// Calculate response time
-		duration := time.Since(start)
-		durationColor := getDurationColor(duration)
-
-		// Determine the color based on the status code
-		statusColor := getStatusColor(wrappedWriter.StatusCode)
-		methodColor := getMethodColor(r.Method)
-		resetColor := "\033[0m"
-
-		// Check for error message in context
-		var errorMsg string
-		type ctxKey string
-		if v := r.Context().Value(ctxKey("envvar_error")); v != nil {
-			if s, ok := v.(string); ok && s != "" {
-				errorMsg = s
+// LoggerWithConfig creates a logging middleware with custom configuration
+func LoggerWithConfig(config LoggerConfig) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Configure logger based on timestamp preference
+			logger := log.New(os.Stderr, "", 0) // Create logger with no default flags
+			if config.IncludeTimestamp {
+				logger.SetFlags(log.LstdFlags) // Set standard flags (date and time)
 			}
-		}
 
-		// Log the request with colors and response time, and error if present
-		if errorMsg != "" {
-			errorColor := "\033[31m" // Red
-			log.Printf("%s%s%s %s%s%s from %s - %s%d%s in %s%s%s | %sERROR: %s%s",
-				methodColor, r.Method, resetColor,
-				statusColor, r.URL.Path, resetColor,
-				r.RemoteAddr,
-				statusColor, wrappedWriter.StatusCode, resetColor,
-				durationColor, duration, resetColor,
-				errorColor, errorMsg, resetColor,
-			)
-		} else {
-			log.Printf("%s%s%s %s%s%s from %s - %s%d%s in %s%s%s",
-				methodColor, r.Method, resetColor,
-				statusColor, r.URL.Path, resetColor,
-				r.RemoteAddr,
-				statusColor, wrappedWriter.StatusCode, resetColor,
-				durationColor, duration, resetColor,
-			)
-		}
-	})
+			start := time.Now() // Start timing
+			wrappedWriter := &ResponseWriterWrapper{ResponseWriter: w, StatusCode: http.StatusOK}
+
+			// Process the request
+			next.ServeHTTP(wrappedWriter, r)
+
+			// Calculate response time
+			duration := time.Since(start)
+			durationColor := getDurationColor(duration)
+
+			// Determine the color based on the status code
+			statusColor := getStatusColor(wrappedWriter.StatusCode)
+			methodColor := getMethodColor(r.Method)
+			resetColor := "\033[0m"
+
+			// Check for error message in context
+			var errorMsg string
+			type ctxKey string
+			if v := r.Context().Value(ctxKey("envvar_error")); v != nil {
+				if s, ok := v.(string); ok && s != "" {
+					errorMsg = s
+				}
+			}
+
+			// Log the request with colors and response time, and error if present
+			if errorMsg != "" {
+				errorColor := "\033[31m" // Red
+				logger.Printf("%s%s%s %s%s%s from %s - %s%d%s in %s%s%s | %sERROR: %s%s",
+					methodColor, r.Method, resetColor,
+					statusColor, r.URL.Path, resetColor,
+					r.RemoteAddr,
+					statusColor, wrappedWriter.StatusCode, resetColor,
+					durationColor, duration, resetColor,
+					errorColor, errorMsg, resetColor,
+				)
+			} else {
+				logger.Printf("%s%s%s %s%s%s from %s - %s%d%s in %s%s%s",
+					methodColor, r.Method, resetColor,
+					statusColor, r.URL.Path, resetColor,
+					r.RemoteAddr,
+					statusColor, wrappedWriter.StatusCode, resetColor,
+					durationColor, duration, resetColor,
+				)
+			}
+		})
+	}
 }
 
 // getStatusColor returns the color for a given status code

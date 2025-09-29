@@ -83,6 +83,20 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 - EnvVarChecker: Ensures required environment variables are set before handling requests
 - CORS: Handles Cross-Origin Resource Sharing with flexible configuration
 
+### Logger Middleware
+
+By default, the Logger middleware includes timestamps in log output. You can disable timestamps if needed:
+
+```go
+// Default behavior (with timestamps)
+r.Use(middleware.Logger)
+
+// Disable timestamps
+r.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
+    IncludeTimestamp: false,
+}))
+```
+
 ### Example: Using EnvVarChecker Middleware
 
 ```go

@@ -136,6 +136,9 @@ func (r *Router) Trace(path string, handler http.HandlerFunc) {
 	r.Handle(http.MethodTrace, path, handler)
 }
 
+// contextKey is a custom type to avoid collisions in context values
+type contextKey string
+
 // ServeHTTP implements the http.Handler interface
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	for path, methods := range r.routes {
@@ -160,7 +163,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 					// Add parameters to the request context
 					ctx := req.Context()
 					for key, value := range params {
-						ctx = context.WithValue(ctx, key, value)
+						ctx = context.WithValue(ctx, contextKey(key), value)
 					}
 					req = req.WithContext(ctx)
 
@@ -176,7 +179,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 // URLParam retrieves a URL parameter from the request context
 func URLParam(r *http.Request, key string) string {
-	if value, ok := r.Context().Value(key).(string); ok {
+	if value, ok := r.Context().Value(contextKey(key)).(string); ok {
 		return value
 	}
 	return ""

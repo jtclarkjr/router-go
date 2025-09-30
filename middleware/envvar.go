@@ -30,7 +30,9 @@ func EnvVarChecker(envVars ...string) func(http.Handler) http.Handler {
 				// Pass the new context to the logger and any downstream middleware
 				r2 := r.WithContext(ctx)
 				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte(errMsg))
+				if _, err := w.Write([]byte(errMsg)); err != nil {
+					log.Printf("Failed to write error response: %v", err)
+				}
 				// Call next with the new context in case logger or others want to log error
 				next.ServeHTTP(w, r2)
 				return

@@ -35,7 +35,7 @@ func Recoverer(next http.Handler) http.Handler {
 }
 
 // logPanic logs the panic details and stack trace to stderr with colored output.
-func logPanic(err interface{}) {
+func logPanic(err any) {
 	stack := debug.Stack()
 	fmt.Fprintf(os.Stderr, "%sPANIC: %v%s\n", Red, err, Reset)
 	fmt.Fprintf(os.Stderr, "%sSTACK TRACE:%s\n%s\n", Yellow, Reset, formatStack(stack))

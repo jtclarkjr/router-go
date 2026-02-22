@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+
+	"github.com/jtclarkjr/router-go/middleware"
 )
 
 // Middleware represents a function that wraps an http.Handler
@@ -134,6 +136,12 @@ func (r *Router) Connect(path string, handler http.HandlerFunc) {
 // Trace registers a TRACE handler for a specific path
 func (r *Router) Trace(path string, handler http.HandlerFunc) {
 	r.Handle(http.MethodTrace, path, handler)
+}
+
+// WS registers a GET route that upgrades to a WebSocket connection.
+func (r *Router) WS(path string, handler middleware.WSHandler) {
+	wsMiddleware := middleware.WebSocket(handler)
+	r.Handle(http.MethodGet, path, wsMiddleware(http.NotFoundHandler()))
 }
 
 // contextKey is a custom type to avoid collisions in context values

@@ -142,37 +142,33 @@ type contextKey string
 // ServeHTTP implements the http.Handler interface
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	for path, methods := range r.routes {
-		for method, route := range methods {
-			if req.Method == method {
-				// Handle wildcard paths (ending with /*)
-				if strings.HasSuffix(path, "/*") {
-					prefixPath := strings.TrimSuffix(path, "/*")
-					if strings.HasPrefix(req.URL.Path, prefixPath) {
-						// Serve the request for wildcard match
-						route.Handler.ServeHTTP(w, req)
-						return
-					}
-				} else if route.ParamPattern.MatchString(req.URL.Path) {
-					// Handle parameterized paths
-					matches := route.ParamPattern.FindStringSubmatch(req.URL.Path)
-					params := map[string]string{}
-					for i, key := range route.ParamKeys {
-						params[key] = matches[i+1]
-					}
-
-					// Add parameters to the request context
-					ctx := req.Context()
-					for key, value := range params {
-						ctx = context.WithValue(ctx, contextKey(key), value)
-					}
-					req = req.WithContext(ctx)
-
-					// Serve the request
-					route.Handler.ServeHTTP(w, req)
-					return
-				}
-			}
+		route, ok := methods[req.Method]
+		if !ok {
+			continue
 		}
+
+		// Handle wildcard paths (ending with /*)
+		if strings.HasSuffix(path, "/*") {
+			prefix := strings.TrimSuffix(path, "/*")
+			if !strings.HasPrefix(req.URL.Path, prefix) {
+				continue
+			}
+			route.Handler.ServeHTTP(w, req)
+			return
+		}
+
+		// Handle parameterized paths
+		matches := route.ParamPattern.FindStringSubmatch(req.URL.Path)
+		if matches == nil {
+			continue
+		}
+
+		ctx := req.Context()
+		for i, key := range route.ParamKeys {
+			ctx = context.WithValue(ctx, contextKey(key), matches[i+1])
+		}
+		route.Handler.ServeHTTP(w, req.WithContext(ctx))
+		return
 	}
 	http.NotFound(w, req)
 }

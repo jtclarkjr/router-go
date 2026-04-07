@@ -12,18 +12,6 @@ type LoggerConfig struct {
 	IncludeTimestamp bool
 }
 
-// ResponseWriterWrapper wraps http.ResponseWriter to capture the status code
-type ResponseWriterWrapper struct {
-	http.ResponseWriter
-	StatusCode int
-}
-
-// WriteHeader captures the status code
-func (rw *ResponseWriterWrapper) WriteHeader(code int) {
-	rw.StatusCode = code
-	rw.ResponseWriter.WriteHeader(code)
-}
-
 // Middleware for logging requests with colorful output and response time (timestamp optional)
 func Logger(next http.Handler) http.Handler {
 	return LoggerWithConfig(LoggerConfig{IncludeTimestamp: true})(next) // Default to including timestamps

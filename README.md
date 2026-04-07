@@ -248,6 +248,34 @@ func main() {
 | `OptionsPassthrough` | `bool` | Pass OPTIONS requests to next handler instead of terminating | `false` |
 | `Debug` | `bool` | Add X-CORS-Debug headers for troubleshooting | `false` |
 
+### ResponseWriterWrapper
+
+The `ResponseWriterWrapper` captures the response status code while preserving the original `http.ResponseWriter` interfaces, including `http.Hijacker` for WebSocket upgrades. It is used internally by the Logger middleware but can also be used when building custom middleware.
+
+```go
+func MyMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        wrapped := &middleware.ResponseWriterWrapper{
+            ResponseWriter: w,
+            StatusCode:     http.StatusOK,
+        }
+
+        next.ServeHTTP(wrapped, r)
+
+        // Access the captured status code
+        log.Printf("Response status: %d", wrapped.StatusCode)
+    })
+}
+```
+
+Because the wrapper implements `http.Hijacker`, WebSocket upgrades work correctly even when the wrapper is in the middleware chain:
+
+```go
+r := router.NewRouter()
+r.Use(middleware.Logger) // uses ResponseWriterWrapper internally
+r.Get("/ws", wsHandler)  // WebSocket upgrade works through the logger
+```
+
 ## Requirements
 - Uses current latest Go version (1.24.1)
 - Standard library packages

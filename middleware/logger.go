@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -10,6 +11,7 @@ import (
 // LoggerConfig holds configuration options for the logger middleware
 type LoggerConfig struct {
 	IncludeTimestamp bool
+	Output          io.Writer // Defaults to os.Stderr if nil
 }
 
 // Middleware for logging requests with colorful output and response time (timestamp optional)
@@ -21,8 +23,12 @@ func Logger(next http.Handler) http.Handler {
 func LoggerWithConfig(config LoggerConfig) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Configure logger based on timestamp preference
-			logger := log.New(os.Stderr, "", 0) // Create logger with no default flags
+			// Configure logger based on config
+			output := config.Output
+			if output == nil {
+				output = os.Stderr
+			}
+			logger := log.New(output, "", 0)
 			if config.IncludeTimestamp {
 				logger.SetFlags(log.LstdFlags) // Set standard flags (date and time)
 			}

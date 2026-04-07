@@ -27,3 +27,10 @@ func (rw *ResponseWriterWrapper) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	}
 	return nil, nil, fmt.Errorf("underlying ResponseWriter does not implement http.Hijacker")
 }
+
+// Flush implements http.Flusher by delegating to the underlying ResponseWriter.
+func (rw *ResponseWriterWrapper) Flush() {
+	if fl, ok := rw.ResponseWriter.(http.Flusher); ok {
+		fl.Flush()
+	}
+}

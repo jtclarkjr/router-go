@@ -11,7 +11,7 @@ import (
 // LoggerConfig holds configuration options for the logger middleware
 type LoggerConfig struct {
 	IncludeTimestamp bool
-	Output          io.Writer // Defaults to os.Stderr if nil
+	Output           io.Writer // Defaults to os.Stderr if nil
 }
 
 // Middleware for logging requests with colorful output and response time (timestamp optional)

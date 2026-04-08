@@ -49,9 +49,9 @@ func formatStack(stack []byte) string {
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if strings.Contains(line, ".go:") {
-			formattedStack.WriteString(fmt.Sprintf("%s  %s%s\n", Cyan, line, Reset))
+			fmt.Fprintf(&formattedStack, "%s  %s%s\n", Cyan, line, Reset)
 		} else {
-			formattedStack.WriteString(fmt.Sprintf("%s%s\n", Yellow, line))
+			fmt.Fprintf(&formattedStack, "%s%s\n", Yellow, line)
 		}
 	}
 

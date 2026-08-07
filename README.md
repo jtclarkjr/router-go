@@ -1,12 +1,12 @@
-# Custom Go Router
+# router-go
 
-## Overview
-This package implements a custom router with middleware support for a web application, providing flexible routing and request handling.
+A small, standard-library HTTP router with route groups, path parameters,
+middleware, CORS helpers, request logging, rate limiting, and WebSocket
+upgrades.
 
-## Why?
-Q: Why not just use Chi for routing
-
-A: Chi is really good and my favorite, but was using custom routing per project that doesnt add extra things included in chi and just wanted to add it as a package to have in one place.
+The module intentionally keeps its API close to `net/http`: `*router.Router`
+implements `http.Handler`, while middleware uses
+`func(http.Handler) http.Handler`.
 
 ## Installation
 
@@ -14,271 +14,232 @@ A: Chi is really good and my favorite, but was using custom routing per project 
 go get github.com/jtclarkjr/router-go
 ```
 
-## Usage
+## Quick start
 
 ```go
+package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+
+	router "github.com/jtclarkjr/router-go"
+	"github.com/jtclarkjr/router-go/middleware"
+)
+
 func main() {
- // Create a new custom router
- r := router.NewRouter()
+	r := router.NewRouter()
 
- // Middlewares
- r.Use(middleware.Logger)
- r.Use(middleware.Recoverer)
- r.Use(middleware.RateLimiter)
- r.Use(middleware.Throttle(5))
+	// Middleware applies to routes registered after each Use call.
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+	r.Use(middleware.Throttle(5))
 
- // Food routes
- r.Get("/users", getUsersHandler)
- r.Post("/user", ceateUserHandler)
- r.Put("/users/{id}", createUserHandler)
+	r.Get("/users/{id}", func(w http.ResponseWriter, req *http.Request) {
+		id := router.URLParam(req, "id")
+		fmt.Fprintf(w, "user %s", id)
+	})
 
- // Start the HTTP server
- fmt.Println("Starting server on :8080")
- log.Fatal(http.ListenAndServe(":8080", r))
+	log.Fatal(http.ListenAndServe(":8080", r))
 }
-
-
-// Example on how to use param in handler
-// Extract id using URLParam
-itemId := router.URLParam(r, "id")
-
 ```
 
-Subroute example
+## Routing
+
+The router includes helpers for GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS,
+CONNECT, and TRACE. Use `Handle` for another method or an `http.Handler`
+instead of an `http.HandlerFunc`.
+
 ```go
-func main() {
-  r := router.NewRouter()
-
-  r.Route("/admin", func(r *router.Router) {
-    r.Get("/users", getUsersHandler)
-    r.Post("/users", createUserHandler)
-  })
-}
-
+r.Get("/users", listUsers)
+r.Post("/users", createUser)
+r.Handle("PURGE", "/cache", purgeHandler)
 ```
 
-Two ways to use Query
+A path segment written as `{name}` is available through `URLParam`.
+`URLQuery` is a convenience wrapper around `req.URL.Query().Get`.
+
 ```go
-id := router.URLQuery(r, "id")
-// or
-
-// stlib net/http request.go approach
-func Handler(w http.ResponseWriter, r *http.Request) {
-  id := r.URL.Query().Get("id")
-}
-
+r.Get("/users/{id}", func(w http.ResponseWriter, req *http.Request) {
+	id := router.URLParam(req, "id")
+	filter := router.URLQuery(req, "filter")
+	fmt.Fprintf(w, "%s:%s", id, filter)
+})
 ```
 
-## Routing Features
-- Supports HTTP methods
-- Middleware chaining
-- Dynamic route parameters
-- Rate limiting and logging
+Paths ending in `/*` use prefix matching.
 
+```go
+r.Get("/assets/*", assetHandler)
+```
+
+### Route groups
+
+`Route` creates a temporary subrouter and copies the middleware already
+installed on its parent. For compatibility with the current matcher, prefixed
+groups dispatch through an inner wildcard route.
+
+```go
+r.Route("/admin", func(admin *router.Router) {
+	admin.Use(requireAdmin)
+	admin.Get("/*", adminHandler)
+})
+```
+
+Middleware is wrapped at registration time. Calling `Use` does not alter
+routes that were registered earlier.
 
 ## Middleware
-- Logger: Logs incoming requests
-- RateLimiter: Prevents excessive requests
-- Throttle: Limits concurrent requests
-- EnvVarChecker: Ensures required environment variables are set before handling requests
-- CORS: Handles Cross-Origin Resource Sharing with flexible configuration
 
-### Logger Middleware
+The `middleware` package contains independent `net/http` middleware and
+supporting utilities:
 
-By default, the Logger middleware includes timestamps in log output. You can disable timestamps if needed:
+- `Logger` and `LoggerWithConfig`
+- `Recoverer`
+- `CORS`, `SimpleCORS`, and `StrictCORS`
+- `RateLimiter`
+- `Throttle`
+- `EnvVarChecker`
+- `WebSocket` and `WebSocketWithConfig`
+- `APIRateLimiter` and `SingleFlight`
+
+### Logger
+
+`Logger` writes timestamped, colored request logs to standard error. Use
+`LoggerWithConfig` to change the destination or disable timestamps.
 
 ```go
-// Default behavior (with timestamps)
-r.Use(middleware.Logger)
-
-// Disable timestamps
 r.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
-    IncludeTimestamp: false,
+	IncludeTimestamp: false,
+	Output:           os.Stdout,
 }))
 ```
 
-### Example: Using EnvVarChecker Middleware
+### Environment checks
 
 ```go
-import (
-    "github.com/jtclarkjr/router-go/middleware"
-    // ...other imports
-)
-
-func main() {
-    r := router.NewRouter()
-
-    // Check that required environment variables are set
-    r.Use(middleware.EnvVarChecker("DB_URL", "API_KEY"))
-
-    // ...other middleware and routes
-}
+r.Use(middleware.EnvVarChecker("DB_URL", "API_KEY"))
 ```
 
-### CORS Middleware
+For compatibility, a missing variable produces a 500 response and then invokes
+the next handler.
 
-The CORS middleware provides flexible configuration for handling Cross-Origin Resource Sharing.
+### CORS
 
-#### Simple CORS (Allow all origins)
+Use `SimpleCORS` for the permissive defaults:
 
 ```go
-import (
-    "github.com/jtclarkjr/router-go/middleware"
-)
-
-func main() {
-    r := router.NewRouter()
-    
-    // Allow all origins with default settings
-    r.Use(middleware.SimpleCORS())
-    
-    // ...routes
-}
+r.Use(middleware.SimpleCORS())
 ```
 
-#### Strict CORS (Specific origins only)
+Use `StrictCORS` for a credentialed origin allowlist:
 
 ```go
-func main() {
-    r := router.NewRouter()
-    
-    // Only allow specific origins with credentials
-    r.Use(middleware.StrictCORS([]string{
-        "http://localhost:3000",
-        "https://app.example.com",
-    }))
-    
-    // ...routes
-}
+r.Use(middleware.StrictCORS([]string{
+	"http://localhost:3000",
+	"https://app.example.com",
+}))
 ```
 
-#### Custom CORS Configuration
+For full control, provide `CORSConfig`:
 
 ```go
-func main() {
-    r := router.NewRouter()
-    
-    corsConfig := middleware.CORSConfig{
-        // Origins that are allowed (supports wildcards)
-        AllowedOrigins: []string{
-            "http://localhost:3000",
-            "https://example.com",
-            "https://*.mydomain.com",  // Wildcard support
-        },
-        
-        // HTTP methods that are allowed
-        AllowedMethods: []string{
-            http.MethodGet,
-            http.MethodPost,
-            http.MethodPut,
-            http.MethodDelete,
-            http.MethodOptions,
-        },
-        
-        // Headers that the client can send
-        AllowedHeaders: []string{
-            "Content-Type",
-            "Authorization",
-            "X-Requested-With",
-        },
-        
-        // Headers exposed to the client
-        ExposedHeaders: []string{
-            "X-Total-Count",
-            "X-Page-Number",
-        },
-        
-        // Cache preflight requests (in seconds)
-        MaxAge: 3600,
-        
-        // Allow cookies/credentials
-        AllowCredentials: true,
-        
-        // Let other handlers process OPTIONS
-        OptionsPassthrough: false,
-        
-        // Enable debug headers
-        Debug: true,
-    }
-    
-    r.Use(middleware.CORS(corsConfig))
-    
-    // ...routes
-}
+r.Use(middleware.CORS(middleware.CORSConfig{
+	AllowedOrigins: []string{
+		"http://localhost:3000",
+		"https://*.example.com",
+	},
+	AllowedMethods: []string{
+		http.MethodGet,
+		http.MethodPost,
+		http.MethodOptions,
+	},
+	AllowedHeaders:     []string{"Content-Type", "Authorization"},
+	ExposedHeaders:     []string{"X-Total-Count"},
+	MaxAge:            3600,
+	AllowCredentials:  true,
+	OptionsPassthrough: false,
+	Debug:              false,
+}))
 ```
 
-#### CORS with Route Groups
+| Option | Default when using `DefaultCORSConfig` |
+| --- | --- |
+| `AllowedOrigins` | `["*"]` |
+| `AllowedMethods` | GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS |
+| `AllowedHeaders` | `["*"]` |
+| `ExposedHeaders` | empty |
+| `MaxAge` | `0` |
+| `AllowCredentials` | `false` |
+| `OptionsPassthrough` | `false` |
+| `Debug` | `false` |
 
-You can apply different CORS configurations to different route groups:
+### WebSockets
+
+`WS` registers a GET route that performs the package's existing upgrade
+handshake and passes the hijacked connection to the callback.
 
 ```go
-func main() {
-    r := router.NewRouter()
-    
-    // Global CORS for all routes
-    r.Use(middleware.SimpleCORS())
-    
-    // Admin routes with stricter CORS
-    r.Route("/admin", func(admin *router.Router) {
-        adminCORS := middleware.CORSConfig{
-            AllowedOrigins:   []string{"https://admin.example.com"},
-            AllowedMethods:   []string{http.MethodGet, http.MethodPost},
-            AllowCredentials: true,
-        }
-        admin.Use(middleware.CORS(adminCORS))
-        
-        admin.Get("/dashboard", adminDashboardHandler)
-    })
-    
-    // Public API routes
-    r.Get("/api/public", publicAPIHandler)
-}
+r.WS("/ws", func(conn net.Conn, req *http.Request) {
+	defer conn.Close()
+	// Read and write WebSocket frames on conn.
+})
 ```
 
-#### CORS Configuration Options
-
-| Option | Type | Description | Default |
-|--------|------|-------------|---------|
-| `AllowedOrigins` | `[]string` | List of allowed origins. Use `"*"` for all origins. Supports wildcards like `"https://*.example.com"` | `["*"]` |
-| `AllowedMethods` | `[]string` | HTTP methods allowed for CORS requests | `[GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS]` |
-| `AllowedHeaders` | `[]string` | Headers that can be used in requests. Use `"*"` for all headers | `["*"]` |
-| `ExposedHeaders` | `[]string` | Headers exposed to the client | `[]` |
-| `MaxAge` | `int` | How long (seconds) browsers can cache preflight responses | `0` |
-| `AllowCredentials` | `bool` | Allow cookies, authorization headers, or TLS client certificates | `false` |
-| `OptionsPassthrough` | `bool` | Pass OPTIONS requests to next handler instead of terminating | `false` |
-| `Debug` | `bool` | Add X-CORS-Debug headers for troubleshooting | `false` |
+Use `WebSocketWithConfig` directly when an origin allowlist or custom origin
+check is required.
 
 ### ResponseWriterWrapper
 
-The `ResponseWriterWrapper` captures the response status code while preserving the original `http.ResponseWriter` interfaces, including `http.Hijacker` for WebSocket upgrades. It is used internally by the Logger middleware but can also be used when building custom middleware.
+`ResponseWriterWrapper` captures a response status code and delegates
+`http.Hijacker` and `http.Flusher` to its underlying writer.
 
 ```go
-func MyMiddleware(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        wrapped := &middleware.ResponseWriterWrapper{
-            ResponseWriter: w,
-            StatusCode:     http.StatusOK,
-        }
-
-        next.ServeHTTP(wrapped, r)
-
-        // Access the captured status code
-        log.Printf("Response status: %d", wrapped.StatusCode)
-    })
+wrapped := &middleware.ResponseWriterWrapper{
+	ResponseWriter: w,
+	StatusCode:     http.StatusOK,
 }
+next.ServeHTTP(wrapped, req)
+log.Printf("status=%d", wrapped.StatusCode)
 ```
 
-Because the wrapper implements `http.Hijacker`, WebSocket upgrades work correctly even when the wrapper is in the middleware chain:
+## Shared utilities
 
-```go
-r := router.NewRouter()
-r.Use(middleware.Logger) // uses ResponseWriterWrapper internally
-r.Get("/ws", wsHandler)  // WebSocket upgrade works through the logger
+`middleware.SharedHTTPClient` is configured with connection pooling and a
+10-second timeout. `middleware.SharedAPIRateLimiter` is a process-wide token
+bucket intended for external API calls.
+
+## Go versions
+
+The module requires Go 1.24.1 or newer. Go 1.26.5 is the preferred development
+toolchain, declared separately in `go.mod`, so consumers on the existing
+minimum remain supported.
+
+See the [official Go downloads](https://go.dev/dl/) for toolchain installers.
+
+## Development
+
+Run the local quality checks before submitting a change:
+
+```bash
+go fmt ./...
+go vet ./...
+go test ./...
+go test -race ./...
+go test -cover ./...
 ```
 
-## Requirements
-- Uses current latest Go version (1.24.1)
-- Standard library packages
+Compatibility can be checked with explicit toolchains:
+
+```bash
+GOTOOLCHAIN=go1.24.1 go test ./...
+GOTOOLCHAIN=go1.25.7 go test ./...
+GOTOOLCHAIN=go1.26.5 go test ./...
+```
+
+The module has no runtime dependencies outside the Go standard library.
 
 ## License
-MIT License
+
+MIT

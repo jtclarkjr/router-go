@@ -7,47 +7,37 @@ import (
 	"strings"
 )
 
-// CORSConfig defines the configuration for CORS middleware
+// CORSConfig configures the CORS middleware.
 type CORSConfig struct {
-	// AllowedOrigins is a list of origins a cross-domain request can be executed from.
-	// If the special "*" value is present in the list, all origins will be allowed.
-	// An origin may contain a wildcard (*) to replace 0 or more characters
-	// (i.e.: http://*.domain.com). Usage of wildcards implies a small performance penalty.
-	// Only one wildcard can be used per origin.
-	// Default value is ["*"]
+	// AllowedOrigins lists origins that may make cross-origin requests.
+	// The value "*" allows every origin. One wildcard may appear within an
+	// origin, for example "https://*.example.com".
 	AllowedOrigins []string
 
-	// AllowedMethods is a list of methods the client is allowed to use with
-	// cross-domain requests. Default value is simple methods (HEAD, GET and POST).
+	// AllowedMethods lists methods returned for preflight requests.
 	AllowedMethods []string
 
-	// AllowedHeaders is list of non simple headers the client is allowed to use with
-	// cross-domain requests.
-	// If the special "*" value is present in the list, all headers will be allowed.
-	// Default value is [] but "Origin" is always appended to the list.
+	// AllowedHeaders lists request headers accepted during preflight.
+	// The value "*" reflects every requested header.
 	AllowedHeaders []string
 
-	// ExposedHeaders indicates which headers are safe to expose to the API of a CORS
-	// API specification
+	// ExposedHeaders lists response headers exposed to browser clients.
 	ExposedHeaders []string
 
-	// MaxAge indicates how long (in seconds) the results of a preflight request
-	// can be cached. Default value is 0 (no cache).
+	// MaxAge is the number of seconds a browser may cache a preflight response.
 	MaxAge int
 
-	// AllowCredentials indicates whether the request can include user credentials like
-	// cookies, HTTP authentication or client side SSL certificates.
+	// AllowCredentials permits credentials on cross-origin requests.
 	AllowCredentials bool
 
-	// OptionsPassthrough instructs preflight to let other potential next handlers to
-	// process the OPTIONS method. Turn this on if your application handles OPTIONS.
+	// OptionsPassthrough passes preflight requests to the next handler.
 	OptionsPassthrough bool
 
-	// Debugging turns on debug logging
+	// Debug adds an X-CORS-Debug response header.
 	Debug bool
 }
 
-// DefaultCORSConfig returns a generic default configuration with "*" for allowed origins
+// DefaultCORSConfig returns the permissive default CORS configuration.
 func DefaultCORSConfig() CORSConfig {
 	return CORSConfig{
 		AllowedOrigins: []string{"*"},
@@ -67,9 +57,33 @@ func DefaultCORSConfig() CORSConfig {
 	}
 }
 
-// CORS creates a new CORS middleware with the provided configuration
+type corsHandler struct {
+	config          CORSConfig
+	next            http.Handler
+	wildcardOrigins []wildcardOrigin
+	allowAllOrigins bool
+	allowAllHeaders bool
+}
+
+// CORS returns middleware configured by config.
 func CORS(config CORSConfig) func(http.Handler) http.Handler {
-	// Set defaults if not provided
+	config = applyCORSDefaults(config)
+	wildcardOrigins, allowAllOrigins := compileAllowedOrigins(config.AllowedOrigins)
+	allowAllHeaders := slices.Contains(config.AllowedHeaders, "*")
+
+	return func(next http.Handler) http.Handler {
+		handler := &corsHandler{
+			config:          config,
+			next:            next,
+			wildcardOrigins: wildcardOrigins,
+			allowAllOrigins: allowAllOrigins,
+			allowAllHeaders: allowAllHeaders,
+		}
+		return http.HandlerFunc(handler.serveHTTP)
+	}
+}
+
+func applyCORSDefaults(config CORSConfig) CORSConfig {
 	if len(config.AllowedOrigins) == 0 {
 		config.AllowedOrigins = []string{"*"}
 	}
@@ -80,110 +94,115 @@ func CORS(config CORSConfig) func(http.Handler) http.Handler {
 			http.MethodHead,
 		}
 	}
+	return config
+}
 
-	// Pre-compile wildcard patterns for performance
+func compileAllowedOrigins(allowedOrigins []string) ([]wildcardOrigin, bool) {
 	wildcardOrigins := make([]wildcardOrigin, 0)
-	allowAllOrigins := false
-	for _, origin := range config.AllowedOrigins {
+	for _, origin := range allowedOrigins {
 		if origin == "*" {
-			allowAllOrigins = true
-			break
+			return wildcardOrigins, true
 		}
 		if strings.Contains(origin, "*") {
 			wildcardOrigins = append(wildcardOrigins, newWildcardOrigin(origin))
 		}
 	}
+	return wildcardOrigins, false
+}
 
-	allowAllHeaders := slices.Contains(config.AllowedHeaders, "*")
+func (h *corsHandler) serveHTTP(w http.ResponseWriter, r *http.Request) {
+	origin := r.Header.Get("Origin")
+	if !isOriginAllowed(origin, h.config.AllowedOrigins, h.wildcardOrigins, h.allowAllOrigins) {
+		h.serveDisallowedOrigin(w, r, origin)
+		return
+	}
 
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			origin := r.Header.Get("Origin")
+	h.setOriginHeaders(w, origin)
 
-			// Check if origin is allowed
-			if !isOriginAllowed(origin, config.AllowedOrigins, wildcardOrigins, allowAllOrigins) {
-				if config.Debug {
-					w.Header().Set("X-CORS-Debug", "Origin not allowed: "+origin)
-				}
-				// If origin is not allowed and this is a preflight, reject it
-				if r.Method == http.MethodOptions && !config.OptionsPassthrough {
-					w.WriteHeader(http.StatusForbidden)
-					return
-				}
-				// For non-preflight requests, continue without CORS headers
-				next.ServeHTTP(w, r)
-				return
-			}
+	if r.Method == http.MethodOptions {
+		if h.servePreflight(w, r) {
+			return
+		}
+	} else {
+		h.setExposedHeaders(w)
+	}
 
-			// Set CORS headers
-			if allowAllOrigins && !config.AllowCredentials {
-				w.Header().Set("Access-Control-Allow-Origin", "*")
-			} else {
-				w.Header().Set("Access-Control-Allow-Origin", origin)
-				w.Header().Add("Vary", "Origin")
-			}
+	h.next.ServeHTTP(w, r)
+}
 
-			// Set credentials header
-			if config.AllowCredentials {
-				w.Header().Set("Access-Control-Allow-Credentials", "true")
-			}
+func (h *corsHandler) serveDisallowedOrigin(w http.ResponseWriter, r *http.Request, origin string) {
+	if h.config.Debug {
+		w.Header().Set("X-CORS-Debug", "Origin not allowed: "+origin)
+	}
+	if r.Method == http.MethodOptions && !h.config.OptionsPassthrough {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+	h.next.ServeHTTP(w, r)
+}
 
-			// Handle preflight request
-			if r.Method == http.MethodOptions {
-				// Set allowed methods
-				if len(config.AllowedMethods) > 0 {
-					w.Header().Set("Access-Control-Allow-Methods", strings.Join(config.AllowedMethods, ", "))
-				}
+func (h *corsHandler) setOriginHeaders(w http.ResponseWriter, origin string) {
+	if h.allowAllOrigins && !h.config.AllowCredentials {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+	} else {
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Add("Vary", "Origin")
+	}
 
-				// Set allowed headers
-				requestedHeaders := r.Header.Get("Access-Control-Request-Headers")
-				if allowAllHeaders || requestedHeaders == "" {
-					w.Header().Set("Access-Control-Allow-Headers", requestedHeaders)
-				} else if len(config.AllowedHeaders) > 0 {
-					// Check if requested headers are in the allowed list
-					allowed := filterAllowedHeaders(requestedHeaders, config.AllowedHeaders)
-					if allowed != "" {
-						w.Header().Set("Access-Control-Allow-Headers", allowed)
-					}
-				}
-
-				// Set max age
-				if config.MaxAge > 0 {
-					w.Header().Set("Access-Control-Max-Age", strconv.Itoa(config.MaxAge))
-				}
-
-				if config.Debug {
-					w.Header().Set("X-CORS-Debug", "Preflight response")
-				}
-
-				// If OptionsPassthrough is false, end the request here
-				if !config.OptionsPassthrough {
-					w.WriteHeader(http.StatusNoContent)
-					return
-				}
-			} else {
-				// For actual requests, set exposed headers
-				if len(config.ExposedHeaders) > 0 {
-					w.Header().Set("Access-Control-Expose-Headers", strings.Join(config.ExposedHeaders, ", "))
-				}
-			}
-
-			next.ServeHTTP(w, r)
-		})
+	if h.config.AllowCredentials {
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
 	}
 }
 
-// wildcardOrigin represents a wildcard origin pattern
+func (h *corsHandler) servePreflight(w http.ResponseWriter, r *http.Request) bool {
+	if len(h.config.AllowedMethods) > 0 {
+		w.Header().Set("Access-Control-Allow-Methods", strings.Join(h.config.AllowedMethods, ", "))
+	}
+
+	h.setAllowedHeaders(w, r.Header.Get("Access-Control-Request-Headers"))
+
+	if h.config.MaxAge > 0 {
+		w.Header().Set("Access-Control-Max-Age", strconv.Itoa(h.config.MaxAge))
+	}
+	if h.config.Debug {
+		w.Header().Set("X-CORS-Debug", "Preflight response")
+	}
+	if h.config.OptionsPassthrough {
+		return false
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+	return true
+}
+
+func (h *corsHandler) setAllowedHeaders(w http.ResponseWriter, requested string) {
+	if h.allowAllHeaders || requested == "" {
+		w.Header().Set("Access-Control-Allow-Headers", requested)
+		return
+	}
+	if len(h.config.AllowedHeaders) == 0 {
+		return
+	}
+
+	if allowed := filterAllowedHeaders(requested, h.config.AllowedHeaders); allowed != "" {
+		w.Header().Set("Access-Control-Allow-Headers", allowed)
+	}
+}
+
+func (h *corsHandler) setExposedHeaders(w http.ResponseWriter) {
+	if len(h.config.ExposedHeaders) > 0 {
+		w.Header().Set("Access-Control-Expose-Headers", strings.Join(h.config.ExposedHeaders, ", "))
+	}
+}
+
 type wildcardOrigin struct {
 	prefix string
 	suffix string
 }
 
-// newWildcardOrigin creates a new wildcard origin pattern
 func newWildcardOrigin(pattern string) wildcardOrigin {
 	parts := strings.Split(pattern, "*")
 	if len(parts) != 2 {
-		// Invalid pattern, treat as exact match
 		return wildcardOrigin{prefix: pattern}
 	}
 	return wildcardOrigin{
@@ -192,7 +211,6 @@ func newWildcardOrigin(pattern string) wildcardOrigin {
 	}
 }
 
-// match checks if the origin matches the wildcard pattern
 func (w wildcardOrigin) match(origin string) bool {
 	if w.suffix == "" {
 		return origin == w.prefix
@@ -200,66 +218,55 @@ func (w wildcardOrigin) match(origin string) bool {
 	return strings.HasPrefix(origin, w.prefix) && strings.HasSuffix(origin, w.suffix)
 }
 
-// isOriginAllowed checks if the origin is in the allowed list
 func isOriginAllowed(origin string, allowedOrigins []string, wildcardOrigins []wildcardOrigin, allowAll bool) bool {
 	if allowAll {
 		return true
 	}
-
 	if origin == "" {
 		return false
 	}
-
-	// Check exact matches
 	if slices.Contains(allowedOrigins, origin) {
 		return true
 	}
 
-	// Check wildcard matches
 	for _, wildcard := range wildcardOrigins {
 		if wildcard.match(origin) {
 			return true
 		}
 	}
-
 	return false
 }
 
-// filterAllowedHeaders filters the requested headers against the allowed headers
 func filterAllowedHeaders(requested string, allowed []string) string {
 	if requested == "" {
 		return ""
 	}
 
-	// Parse requested headers
 	requestedHeaders := strings.Split(requested, ",")
 	for i := range requestedHeaders {
 		requestedHeaders[i] = strings.TrimSpace(strings.ToLower(requestedHeaders[i]))
 	}
 
-	// Convert allowed headers to lowercase for comparison
 	allowedLower := make(map[string]bool)
-	for _, h := range allowed {
-		allowedLower[strings.ToLower(h)] = true
+	for _, header := range allowed {
+		allowedLower[strings.ToLower(header)] = true
 	}
 
-	// Filter requested headers
-	var result []string
-	for _, h := range requestedHeaders {
-		if allowedLower[h] {
-			result = append(result, h)
+	result := make([]string, 0, len(requestedHeaders))
+	for _, header := range requestedHeaders {
+		if allowedLower[header] {
+			result = append(result, header)
 		}
 	}
-
 	return strings.Join(result, ", ")
 }
 
-// SimpleCORS creates a simple CORS middleware that allows all origins
+// SimpleCORS returns middleware that allows every origin.
 func SimpleCORS() func(http.Handler) http.Handler {
 	return CORS(DefaultCORSConfig())
 }
 
-// StrictCORS creates a strict CORS middleware with specific origins only
+// StrictCORS returns credentialed CORS middleware for allowedOrigins.
 func StrictCORS(allowedOrigins []string) func(http.Handler) http.Handler {
 	config := DefaultCORSConfig()
 	config.AllowedOrigins = allowedOrigins

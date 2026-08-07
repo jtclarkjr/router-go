@@ -10,14 +10,11 @@ func Throttle(limit int) func(http.Handler) http.Handler {
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Acquire a token
 			sem <- struct{}{}
 			defer func() {
-				// Release the token
 				<-sem
 			}()
 
-			// Call the next handler
 			next.ServeHTTP(w, r)
 		})
 	}

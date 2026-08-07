@@ -7,6 +7,11 @@ import (
 	"net/http"
 )
 
+var (
+	_ http.Hijacker = (*ResponseWriterWrapper)(nil)
+	_ http.Flusher  = (*ResponseWriterWrapper)(nil)
+)
+
 // ResponseWriterWrapper wraps http.ResponseWriter to capture the status code
 // while preserving interfaces like http.Hijacker for WebSocket upgrades.
 type ResponseWriterWrapper struct {

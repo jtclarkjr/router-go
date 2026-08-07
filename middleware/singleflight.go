@@ -4,30 +4,28 @@ import (
 	"sync"
 )
 
-// call represents an in-flight or completed request
+// call stores an in-flight or completed invocation.
 type call struct {
 	wg  sync.WaitGroup
 	val []byte
 	err error
 }
 
-// SingleFlight prevents duplicate function calls for the same key
+// SingleFlight coalesces concurrent function calls with the same key.
 type SingleFlight struct {
 	mu sync.Mutex
 	m  map[string]*call
 }
 
-// NewSingleFlight creates a new SingleFlight instance
+// NewSingleFlight creates an initialized SingleFlight.
 func NewSingleFlight() *SingleFlight {
 	return &SingleFlight{
 		m: make(map[string]*call),
 	}
 }
 
-// Do executes and returns the results of the given function, making sure that
-// only one execution is in-flight for a given key at a time. If a duplicate
-// comes in, the duplicate caller waits for the original to complete and
-// receives the same results.
+// Do runs fn once for concurrent callers sharing key.
+// Waiting callers receive the same value and error.
 func (sf *SingleFlight) Do(key string, fn func() ([]byte, error)) ([]byte, error) {
 	sf.mu.Lock()
 	if c, ok := sf.m[key]; ok {

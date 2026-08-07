@@ -5,51 +5,37 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 )
 
-// EnvVarChecker returns a middleware that checks if the given environment variables are not empty.
-// If any are empty, it responds with 500 and a message listing the missing variables.
+// EnvVarChecker returns middleware that reports missing environment variables.
+// The current behavior writes a 500 response and then calls the next handler.
 func EnvVarChecker(envVars ...string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			missing := []string{}
-			for _, v := range envVars {
-				if os.Getenv(v) == "" {
-					missing = append(missing, v)
+			missing := make([]string, 0, len(envVars))
+			for _, name := range envVars {
+				if os.Getenv(name) == "" {
+					missing = append(missing, name)
 				}
 			}
-			if len(missing) > 0 {
-				errMsg := "Missing required environment variables: [" + joinStrings(missing, ", ") + "]"
-				// Log the error so it appears in the package user's logs
-				errorColor := "\033[31m" // Red
-				resetColor := "\033[0m"
-				log.Printf("%s[EnvVarChecker] %s%s", errorColor, errMsg, resetColor)
-				// Add error to request context for upstream middleware/handlers
-				type ctxKey string
-				ctx := context.WithValue(r.Context(), ctxKey("envvar_error"), errMsg)
-				// Pass the new context to the logger and any downstream middleware
-				r2 := r.WithContext(ctx)
-				w.WriteHeader(http.StatusInternalServerError)
-				if _, err := w.Write([]byte(errMsg)); err != nil {
-					log.Printf("Failed to write error response: %v", err)
-				}
-				// Call next with the new context in case logger or others want to log error
-				next.ServeHTTP(w, r2)
+			if len(missing) == 0 {
+				next.ServeHTTP(w, r)
 				return
 			}
-			next.ServeHTTP(w, r)
+
+			errMsg := "Missing required environment variables: [" + strings.Join(missing, ", ") + "]"
+			log.Printf("%s[EnvVarChecker] %s%s", Red, errMsg, Reset)
+
+			type ctxKey string
+			ctx := context.WithValue(r.Context(), ctxKey("envvar_error"), errMsg)
+			requestWithError := r.WithContext(ctx)
+
+			w.WriteHeader(http.StatusInternalServerError)
+			if _, err := w.Write([]byte(errMsg)); err != nil {
+				log.Printf("Failed to write error response: %v", err)
+			}
+			next.ServeHTTP(w, requestWithError)
 		})
 	}
-}
-
-// joinStrings joins a slice of strings with the given separator.
-func joinStrings(strs []string, sep string) string {
-	if len(strs) == 0 {
-		return ""
-	}
-	result := strs[0]
-	for _, s := range strs[1:] {
-		result += sep + s
-	}
-	return result
 }

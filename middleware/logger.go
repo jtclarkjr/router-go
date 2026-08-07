@@ -8,18 +8,18 @@ import (
 	"time"
 )
 
-// LoggerConfig holds configuration options for the logger middleware
+// LoggerConfig configures LoggerWithConfig.
 type LoggerConfig struct {
 	IncludeTimestamp bool
-	Output           io.Writer // Defaults to os.Stderr if nil
+	Output           io.Writer // Output defaults to os.Stderr when nil.
 }
 
-// Middleware for logging requests with colorful output and response time (timestamp optional)
+// Logger logs requests with timestamps, status codes, and response durations.
 func Logger(next http.Handler) http.Handler {
-	return LoggerWithConfig(LoggerConfig{IncludeTimestamp: true})(next) // Default to including timestamps
+	return LoggerWithConfig(LoggerConfig{IncludeTimestamp: true})(next)
 }
 
-// LoggerWithConfig creates a logging middleware with custom configuration
+// LoggerWithConfig returns logging middleware configured by config.
 func LoggerWithConfig(config LoggerConfig) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

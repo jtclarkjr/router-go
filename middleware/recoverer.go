@@ -9,12 +9,15 @@ import (
 	"strings"
 )
 
-// ANSI color codes
 const (
-	Red    = "\033[31m"
+	// Red is the ANSI red color sequence.
+	Red = "\033[31m"
+	// Yellow is the ANSI yellow color sequence.
 	Yellow = "\033[33m"
-	Cyan   = "\033[36m"
-	Reset  = "\033[0m"
+	// Cyan is the ANSI cyan color sequence.
+	Cyan = "\033[36m"
+	// Reset is the ANSI reset color sequence.
+	Reset = "\033[0m"
 )
 
 // Recoverer is a middleware that recovers from panics, logs the panic (with a backtrace),
@@ -23,10 +26,8 @@ func Recoverer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
-				// Log the panic details
 				logPanic(err)
 
-				// Respond with 500 Internal Server Error
 				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			}
 		}()

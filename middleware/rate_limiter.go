@@ -6,9 +6,9 @@ import (
 	"time"
 )
 
-// RateLimiter is a middleware that limits the number of requests per second
+// RateLimiter allows one request per remote address per second.
 func RateLimiter(next http.Handler) http.Handler {
-	var lastRequestTime = make(map[string]time.Time)
+	lastRequestTime := make(map[string]time.Time)
 	var mu sync.Mutex
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

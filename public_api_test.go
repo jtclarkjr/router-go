@@ -13,6 +13,9 @@ import (
 
 var (
 	_ func() *router.Router                                                           = router.NewRouter
+	_ string                                                                          = router.Version
+	_ func(*router.Router, string, string, http.Handler) error                        = (*router.Router).Register
+	_ func(*router.Router) []router.RouteInfo                                         = (*router.Router).Routes
 	_ func(*http.Request, string) string                                              = router.URLParam
 	_ func(*http.Request, string) string                                              = router.URLQuery
 	_ http.Handler                                                                    = router.NewRouter()

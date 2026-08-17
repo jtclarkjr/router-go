@@ -1,0 +1,108 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "Graph API",
+    "version": "0.7.0",
+    "description": "Typed graph operations"
+  },
+  "servers": [
+    {
+      "url": "https://api.example.test"
+    }
+  ],
+  "tags": [
+    {
+      "name": "nodes",
+      "description": "Graph nodes"
+    }
+  ],
+  "paths": {
+    "/nodes/{id}": {
+      "get": {
+        "operationId": "getNode",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/openapi_test_node_bb01cbcbff6daac0"
+                }
+              }
+            },
+            "description": "Node found"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Get a node",
+        "tags": [
+          "nodes"
+        ],
+        "x-audit": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "openapi_test_node_bb01cbcbff6daac0": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "enum": [
+              "primary",
+              "secondary"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "description": "Node identifier",
+            "example": "node-1",
+            "minLength": 1,
+            "type": "string"
+          },
+          "next": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/openapi_test_node_bb01cbcbff6daac0"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "weight": {
+            "format": "double",
+            "maximum": 10,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  }
+}

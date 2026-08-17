@@ -29,6 +29,12 @@ type collectionConstraints struct {
 	Level    int               `json:"level" validate:"oneof=1 2 3"`
 }
 
+type requiredPointers struct {
+	Enabled *bool   `json:"enabled" validate:"required"`
+	Count   *int    `json:"count" validate:"required"`
+	Name    *string `json:"name" validate:"required"`
+}
+
 type envelope[T any] struct {
 	Data T `json:"data" validate:"required"`
 }
@@ -244,6 +250,26 @@ func TestSchemaUsesCollectionAndTypedEnumConstraints(t *testing.T) {
 	}
 	if got := schema.Properties["level"].Enum; len(got) != 3 || fmt.Sprint(got[0]) != "1" {
 		t.Fatalf("integer enum = %#v", got)
+	}
+}
+
+func TestRequiredPointersOnlyRequirePresence(t *testing.T) {
+	registry := openapi.New(openapi.Info{})
+	ref := registry.SchemaForType(reflect.TypeFor[requiredPointers]())
+	schema := registry.Document().Components.Schemas[strings.TrimPrefix(ref.Ref, "#/components/schemas/")]
+	if got := strings.Join(schema.Required, ","); got != "enabled,count,name" {
+		t.Fatalf("required fields = %q", got)
+	}
+
+	for name, wantType := range map[string]string{"enabled": "boolean", "count": "integer", "name": "string"} {
+		property := schema.Properties[name]
+		if len(property.OneOf) != 1 || property.OneOf[0].Type != wantType {
+			t.Fatalf("%s schema = %#v", name, property)
+		}
+		target := property.OneOf[0]
+		if target.Const != nil || target.Not != nil || target.MinLength != nil {
+			t.Fatalf("%s gained a nonzero constraint: %#v", name, target)
+		}
 	}
 }
 

@@ -1,6 +1,14 @@
 # Changelog
 
-## [0.7.0] - Unreleased
+## [0.7.1] - 2026-08-17
+
+### Fixed
+
+- Required pointer and interface fields now mean present/non-null in generated
+  schemas, matching runtime validation, without incorrectly imposing nonzero
+  constraints on their underlying scalar values.
+
+## [0.7.0] - 2026-08-17
 
 ### Added
 

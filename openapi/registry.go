@@ -387,7 +387,7 @@ func (r *Registry) SchemaForTypeWithValidation(t reflect.Type, validation string
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	schema := r.schemaForTypeLocked(t, make(map[reflect.Type]bool))
-	applyValidationSchema(schema, validation)
+	applyValidationSchema(schema, validation, t)
 	return schema
 }
 

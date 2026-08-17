@@ -222,7 +222,7 @@ func (r *Registry) inlineStructSchemaLocked(t reflect.Type, visiting map[reflect
 
 		property := r.schemaForTypeLocked(field.Type, visiting)
 		property.Description = field.Tag.Get("description")
-		applyValidationSchema(property, field.Tag.Get("validate"))
+		applyValidationSchema(property, field.Tag.Get("validate"), field.Type)
 		propertyType := validationSchemaTarget(property).Type
 		if example := field.Tag.Get("example"); example != "" {
 			property.Example = schemaEnumValue(propertyType, example)
@@ -260,7 +260,7 @@ func jsonFieldName(field reflect.StructField) (string, bool, bool) {
 	return name, omitEmpty, false
 }
 
-func applyValidationSchema(schema *Schema, tag string) {
+func applyValidationSchema(schema *Schema, tag string, valueType reflect.Type) {
 	if schema == nil || tag == "" {
 		return
 	}
@@ -268,7 +268,7 @@ func applyValidationSchema(schema *Schema, tag string) {
 	for _, rule := range strings.Split(tag, ",") {
 		name, value, hasValue := strings.Cut(rule, "=")
 		if name == "required" {
-			applyRequiredSchema(schema)
+			applyRequiredSchema(schema, presenceOnlyRequired(valueType))
 			continue
 		}
 		if !hasValue {
@@ -304,7 +304,7 @@ func applyValidationSchema(schema *Schema, tag string) {
 	}
 }
 
-func applyRequiredSchema(schema *Schema) {
+func applyRequiredSchema(schema *Schema, presenceOnly bool) {
 	if schema == nil {
 		return
 	}
@@ -317,6 +317,9 @@ func applyRequiredSchema(schema *Schema) {
 			nonNull = append(nonNull, candidate)
 		}
 		schema.OneOf = nonNull
+	}
+	if presenceOnly {
+		return
 	}
 	target := validationSchemaTarget(schema)
 	switch target.Type {
@@ -337,6 +340,11 @@ func applyRequiredSchema(schema *Schema) {
 	case "integer", "number":
 		target.Not = &Schema{Const: 0}
 	}
+}
+
+func presenceOnlyRequired(valueType reflect.Type) bool {
+	return valueType != nil &&
+		(valueType.Kind() == reflect.Pointer || valueType.Kind() == reflect.Interface)
 }
 
 func validationSchemaTarget(schema *Schema) *Schema {

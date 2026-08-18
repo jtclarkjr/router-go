@@ -134,6 +134,23 @@ for _, route := range r.Routes() {
 }
 ```
 
+`RegisterAlias` installs a runtime-only alias for an existing route. It reuses
+the target handler and its captured middleware, so global middleware does not
+run twice. Optional alias middleware is useful for deprecation headers.
+Parameter names and wildcard shape must match the target route.
+
+```go
+r.Get("/v1/users/{id}", showUser)
+if err := r.RegisterAlias(
+	http.MethodGet,
+	"/users/{id}",
+	"/v1/users/{id}",
+	deprecatedRoute,
+); err != nil {
+	log.Fatal(err)
+}
+```
+
 ## Typed handlers and OpenAPI 3.1
 
 The optional `typed` package wraps a core router. Request fields declare their
@@ -172,7 +189,7 @@ func main() {
 	contract := openapi.New(openapi.Info{Title: "Chat API", Version: "1.0.0"})
 	r := typed.New(base, typed.WithRegistry(contract))
 
-	err := typed.Register(r, typed.Operation[createMessageInput, message]{
+	err := typed.RegisterWithMiddleware(r, typed.Operation[createMessageInput, message]{
 		Method:        http.MethodPost,
 		Path:          "/v1/rooms/{roomId}/messages",
 		OperationID:   "createMessage",
@@ -183,7 +200,7 @@ func main() {
 			Header: http.Header{"X-Request-ID": []string{input.Trace}},
 			Body:   created,
 		}, nil
-	})
+	}, requireAuth)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -215,13 +232,19 @@ the complete API.
 The generated `/openapi.yaml` is deterministic YAML 1.2. Both serializers stay
 dependency-free.
 
+`RegisterWithMiddleware` wraps the generated handler and runs its middleware
+before request binding and validation. Router-level middleware remains
+outermost. Raw operations have matching `RegisterRawWithMiddleware` and
+`MustRegisterRawWithMiddleware` functions.
+
 ## Middleware
 
 The `middleware` package contains independent `net/http` middleware and
 supporting utilities:
 
 - `Logger` and `LoggerWithConfig`
-- `Recoverer`
+- `SlogLogger` and `SlogLoggerWithConfig`
+- `Recoverer` and `RecovererWithHandler`
 - `CORS`, `SimpleCORS`, and `StrictCORS`
 - `RateLimiter`
 - `Throttle`
@@ -241,7 +264,29 @@ r.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
 }))
 ```
 
+For structured application logs, use the standard-library `slog` adapter. It
+records method, path, status, duration in milliseconds, and `X-Request-ID`
+when present. The colored `Logger` behavior remains unchanged.
+
+```go
+r.Use(middleware.SlogLoggerWithConfig(middleware.SlogLoggerConfig{
+	Logger: slog.New(slog.NewJSONHandler(os.Stdout, nil)),
+}))
+```
+
 ### Environment checks
+
+Validate required variables before constructing application dependencies:
+
+```go
+if err := middleware.RequireEnvVars("DB_URL", "API_KEY"); err != nil {
+	log.Fatal(err)
+}
+```
+
+`MissingEnvVars` returns the missing names when an application needs a custom
+error envelope or startup policy. The existing request-time middleware remains
+available:
 
 ```go
 r.Use(middleware.EnvVarChecker("DB_URL", "API_KEY"))
@@ -249,6 +294,24 @@ r.Use(middleware.EnvVarChecker("DB_URL", "API_KEY"))
 
 For compatibility, a missing variable produces a 500 response and then invokes
 the next handler.
+
+### Panic recovery
+
+`Recoverer` retains its colored stderr stack and plain-text 500 response.
+Applications with structured logging or a JSON error envelope can own both
+through `RecovererWithHandler`:
+
+```go
+r.Use(middleware.RecovererWithHandler(func(
+	w http.ResponseWriter,
+	req *http.Request,
+	recovered any,
+	stack []byte,
+) {
+	slog.ErrorContext(req.Context(), "panic recovered", "panic", recovered, "stack", string(stack))
+	http.Error(w, "internal error", http.StatusInternalServerError)
+}))
+```
 
 ### CORS
 

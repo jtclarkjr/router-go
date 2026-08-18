@@ -10,12 +10,20 @@ import (
 	"strconv"
 	"strings"
 
+	router "github.com/jtclarkjr/router-go"
 	"github.com/jtclarkjr/router-go/openapi"
 )
 
 // Register adds a typed handler to both the HTTP router and OpenAPI registry.
 // If HTTP registration fails, the documented operation is rolled back.
 func Register[I, O any](r *Router, operation Operation[I, O], handler Handler[I, O]) error {
+	return RegisterWithMiddleware(r, operation, handler)
+}
+
+// RegisterWithMiddleware adds a typed handler with operation-specific
+// middleware. The middleware runs before request binding and validation and
+// inside any middleware installed through Router.Use.
+func RegisterWithMiddleware[I, O any](r *Router, operation Operation[I, O], handler Handler[I, O], middleware ...router.Middleware) error {
 	if r == nil || r.base == nil || r.registry == nil {
 		return errors.New("typed: nil router")
 	}
@@ -46,7 +54,7 @@ func Register[I, O any](r *Router, operation Operation[I, O], handler Handler[I,
 		allowedStatuses[status] = true
 	}
 
-	httpHandler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+	var httpHandler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		input, bindErr := bindRequest[I](w, req, plan, requestContentType, r.maxBodyBytes, r.disallowUnknownFields)
 		if bindErr != nil {
 			r.errorCodec.WriteError(w, req, bindErr)
@@ -74,6 +82,7 @@ func Register[I, O any](r *Router, operation Operation[I, O], handler Handler[I,
 			r.errorCodec.WriteError(w, req, err)
 		}
 	})
+	httpHandler = applyMiddleware(httpHandler, middleware)
 
 	if err := r.base.Register(operation.Method, operation.Path, httpHandler); err != nil {
 		r.registry.Remove(operation.Path, operation.Method)
@@ -89,9 +98,24 @@ func MustRegister[I, O any](r *Router, operation Operation[I, O], handler Handle
 	}
 }
 
+// MustRegisterWithMiddleware registers a typed operation with middleware and
+// panics on failure.
+func MustRegisterWithMiddleware[I, O any](r *Router, operation Operation[I, O], handler Handler[I, O], middleware ...router.Middleware) {
+	if err := RegisterWithMiddleware(r, operation, handler, middleware...); err != nil {
+		panic(err)
+	}
+}
+
 // RegisterRaw registers a documented net/http handler without typed body
 // buffering. Use it for SSE, multipart, reverse proxies, and WebSockets.
 func RegisterRaw(r *Router, operation RawOperation, handler http.Handler) error {
+	return RegisterRawWithMiddleware(r, operation, handler)
+}
+
+// RegisterRawWithMiddleware registers a documented raw handler with
+// operation-specific middleware. The middleware runs inside any middleware
+// installed through Router.Use.
+func RegisterRawWithMiddleware(r *Router, operation RawOperation, handler http.Handler, middleware ...router.Middleware) error {
 	if r == nil || r.base == nil || r.registry == nil {
 		return errors.New("typed: nil router")
 	}
@@ -115,16 +139,33 @@ func RegisterRaw(r *Router, operation RawOperation, handler http.Handler) error 
 	if err := r.registry.Add(documentPath, operation.Method, operation.Spec); err != nil {
 		return err
 	}
-	if err := r.base.Register(operation.Method, operation.Path, handler); err != nil {
+	if err := r.base.Register(operation.Method, operation.Path, applyMiddleware(handler, middleware)); err != nil {
 		r.registry.Remove(documentPath, operation.Method)
 		return err
 	}
 	return nil
 }
 
+func applyMiddleware(handler http.Handler, middleware []router.Middleware) http.Handler {
+	for index := len(middleware) - 1; index >= 0; index-- {
+		if middleware[index] != nil {
+			handler = middleware[index](handler)
+		}
+	}
+	return handler
+}
+
 // MustRegisterRaw registers a raw operation and panics on failure.
 func MustRegisterRaw(r *Router, operation RawOperation, handler http.Handler) {
 	if err := RegisterRaw(r, operation, handler); err != nil {
+		panic(err)
+	}
+}
+
+// MustRegisterRawWithMiddleware registers a raw operation with middleware and
+// panics on failure.
+func MustRegisterRawWithMiddleware(r *Router, operation RawOperation, handler http.Handler, middleware ...router.Middleware) {
+	if err := RegisterRawWithMiddleware(r, operation, handler, middleware...); err != nil {
 		panic(err)
 	}
 }

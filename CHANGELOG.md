@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.8.0] - 2026-08-18
+
+### Added
+
+- `Router.RegisterAlias` for runtime aliases that reuse an existing route's
+  handler and captured middleware without double-wrapping global middleware.
+- Optional per-operation middleware through additive typed and raw
+  registration functions, allowing authentication and request enrichment to
+  run before typed binding without changing existing operation structs.
+- Structured request logging through `SlogLogger` and
+  `SlogLoggerWithConfig`.
+- Startup environment validation through `MissingEnvVars` and
+  `RequireEnvVars`.
+- `RecovererWithHandler` for application-owned panic logging and response
+  formats.
+
+### Compatibility
+
+- All additions are opt-in. Existing route matching, registration,
+  middleware ordering, logger output, recovery responses, and
+  `EnvVarChecker` behavior are unchanged.
+
 ## [0.7.1] - 2026-08-17
 
 ### Fixed

@@ -19,6 +19,19 @@ type Handler[I, O any] func(
 ) (typed.Response[O], error)
 ```
 
+`RegisterWithMiddleware` wraps an operation handler before typed request
+binding. Router-level middleware remains outermost. This preserves
+authentication-first behavior for APIs that must return 401/403 before
+reporting malformed request bodies. Raw operations have matching
+`RegisterRawWithMiddleware` and `MustRegisterRawWithMiddleware` functions.
+
+```go
+typed.RegisterWithMiddleware(r, typed.Operation[updateInput, updateOutput]{
+	Method: http.MethodPut,
+	Path:   "/v1/items/{id}",
+}, updateItem, requireAuth)
+```
+
 `typed.Response` contains `Status`, `Header`, and `Body`. A zero status uses
 the operation's declared success status. `typed.NoBody` defaults that status
 to 204 and suppresses the body. Other outputs default to 200 and JSON.

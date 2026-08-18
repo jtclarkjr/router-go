@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -21,6 +22,9 @@ var (
 	// registered. Parameter names do not make otherwise identical patterns
 	// distinct.
 	ErrDuplicateRoute = errors.New("duplicate route")
+	// ErrRouteNotFound indicates that a route referenced by another
+	// registration, such as an alias target, does not exist.
+	ErrRouteNotFound = errors.New("route not found")
 )
 
 // RegistrationError describes a failed route registration.
@@ -126,6 +130,49 @@ func (r *Router) Register(method, path string, handler http.Handler) error {
 
 	middlewareSnapshot := r.middlewareSnapshot()
 	return r.registerPrepared(method, path, applyMiddleware(handler, middlewareSnapshot))
+}
+
+// RegisterAlias registers aliasPath with the handler and captured middleware
+// of an existing targetPath route. Optional alias middleware wraps the reused
+// handler without applying the router's global middleware a second time.
+//
+// Alias and target path parameters must use the same names in the same order,
+// and either both paths or neither path must end in a wildcard. The alias is a
+// runtime-only route; integrations may choose whether to document it.
+func (r *Router) RegisterAlias(method, aliasPath, targetPath string, middleware ...Middleware) error {
+	method = strings.ToUpper(strings.TrimSpace(method))
+	if method == "" {
+		return &RegistrationError{Method: method, Path: aliasPath, Err: fmt.Errorf("%w: empty method", ErrInvalidRoute)}
+	}
+
+	r.mu.RLock()
+	target, exists := r.routes[targetPath][method]
+	targetPattern := r.patterns[targetPath]
+	r.mu.RUnlock()
+	if !exists {
+		return fmt.Errorf("router: alias %s %s target %s: %w", method, aliasPath, targetPath, ErrRouteNotFound)
+	}
+
+	aliasPattern, err := compileRoutePattern(aliasPath)
+	if err != nil {
+		return &RegistrationError{Method: method, Path: aliasPath, Err: fmt.Errorf("%w: %v", ErrInvalidRoute, err)}
+	}
+	if !slices.Equal(aliasPattern.paramKeys, target.ParamKeys) {
+		return &RegistrationError{
+			Method: method,
+			Path:   aliasPath,
+			Err:    fmt.Errorf("%w: alias path parameters must match target %s", ErrInvalidRoute, targetPath),
+		}
+	}
+	if (aliasPattern.kind == wildcardRoute) != (targetPattern.kind == wildcardRoute) {
+		return &RegistrationError{
+			Method: method,
+			Path:   aliasPath,
+			Err:    fmt.Errorf("%w: alias wildcard must match target %s", ErrInvalidRoute, targetPath),
+		}
+	}
+
+	return r.registerPrepared(method, aliasPath, applyMiddleware(target.Handler, middleware))
 }
 
 // Handle registers handler for method and path. It panics when registration
@@ -286,7 +333,9 @@ func routePrecedes(left, right compiledRoute) bool {
 
 func applyMiddleware(handler http.Handler, middleware []Middleware) http.Handler {
 	for i := len(middleware) - 1; i >= 0; i-- {
-		handler = middleware[i](handler)
+		if middleware[i] != nil {
+			handler = middleware[i](handler)
+		}
 	}
 	return handler
 }

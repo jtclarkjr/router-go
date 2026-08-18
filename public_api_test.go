@@ -15,6 +15,7 @@ var (
 	_ func() *router.Router                                                           = router.NewRouter
 	_ string                                                                          = router.Version
 	_ func(*router.Router, string, string, http.Handler) error                        = (*router.Router).Register
+	_ func(*router.Router, string, string, string, ...router.Middleware) error        = (*router.Router).RegisterAlias
 	_ func(*router.Router) []router.RouteInfo                                         = (*router.Router).Routes
 	_ func(*http.Request, string) string                                              = router.URLParam
 	_ func(*http.Request, string) string                                              = router.URLQuery
@@ -31,16 +32,23 @@ var (
 	_ func([]string) func(http.Handler) http.Handler                                  = middleware.StrictCORS
 	_ func(http.Handler) http.Handler                                                 = middleware.Logger
 	_ func(middleware.LoggerConfig) func(http.Handler) http.Handler                   = middleware.LoggerWithConfig
+	_ func(http.Handler) http.Handler                                                 = middleware.SlogLogger
+	_ func(middleware.SlogLoggerConfig) func(http.Handler) http.Handler               = middleware.SlogLoggerWithConfig
 	_ func(http.Handler) http.Handler                                                 = middleware.RateLimiter
 	_ func(http.Handler) http.Handler                                                 = middleware.Recoverer
+	_ func(middleware.PanicHandler) func(http.Handler) http.Handler                   = middleware.RecovererWithHandler
 	_ func(int) func(http.Handler) http.Handler                                       = middleware.Throttle
 	_ func(...string) func(http.Handler) http.Handler                                 = middleware.EnvVarChecker
+	_ func(...string) []string                                                        = middleware.MissingEnvVars
+	_ func(...string) error                                                           = middleware.RequireEnvVars
 	_ func(int, time.Duration) *middleware.APIRateLimiter                             = middleware.NewAPIRateLimiter
 	_ func() *middleware.SingleFlight                                                 = middleware.NewSingleFlight
 	_ *middleware.APIRateLimiter                                                      = middleware.SharedAPIRateLimiter
 	_ *http.Client                                                                    = middleware.SharedHTTPClient
 	_ io.Writer                                                                       = middleware.LoggerConfig{}.Output
+	_ error                                                                           = (*middleware.MissingEnvVarsError)(nil)
 	_                                                                                 = middleware.ResponseWriterWrapper{}
+	_                                                                                 = middleware.SlogLoggerConfig{}
 	_                                                                                 = middleware.CORSConfig{}
 	_                                                                                 = middleware.WSConfig{}
 	_                                                                                 = middleware.APIRateLimiter{}
@@ -49,4 +57,5 @@ var (
 	_                                                                                 = middleware.Yellow
 	_                                                                                 = middleware.Cyan
 	_                                                                                 = middleware.Reset
+	_                                                                                 = router.ErrRouteNotFound
 )

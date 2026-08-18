@@ -13,9 +13,13 @@ var (
 	_ typed.ErrorCodec                                    = typed.DefaultErrorCodec
 	_ typed.ErrorCodec                                    = typed.ErrorCodecFunc(nil)
 	_                                                     = typed.Register[typed.Empty, typed.NoBody]
+	_                                                     = typed.RegisterWithMiddleware[typed.Empty, typed.NoBody]
 	_                                                     = typed.MustRegister[typed.Empty, typed.NoBody]
+	_                                                     = typed.MustRegisterWithMiddleware[typed.Empty, typed.NoBody]
 	_                                                     = typed.RegisterRaw
+	_                                                     = typed.RegisterRawWithMiddleware
 	_                                                     = typed.MustRegisterRaw
+	_                                                     = typed.MustRegisterRawWithMiddleware
 	_                                                     = typed.WithRegistry
 	_                                                     = typed.WithErrorCodec
 	_                                                     = typed.WithMaxBodyBytes

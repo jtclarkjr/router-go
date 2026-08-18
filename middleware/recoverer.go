@@ -20,6 +20,27 @@ const (
 	Reset = "\033[0m"
 )
 
+// PanicHandler handles a recovered panic. Stack contains debug.Stack output.
+type PanicHandler func(http.ResponseWriter, *http.Request, any, []byte)
+
+// RecovererWithHandler returns recovery middleware whose callback owns panic
+// logging and the HTTP response. A nil callback uses the existing Recoverer.
+func RecovererWithHandler(handler PanicHandler) func(http.Handler) http.Handler {
+	if handler == nil {
+		return Recoverer
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer func() {
+				if recovered := recover(); recovered != nil {
+					handler(w, r, recovered, debug.Stack())
+				}
+			}()
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // Recoverer is a middleware that recovers from panics, logs the panic (with a backtrace),
 // and returns a 500 Internal Server Error response.
 func Recoverer(next http.Handler) http.Handler {

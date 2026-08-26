@@ -189,7 +189,7 @@ func main() {
 	contract := openapi.New(openapi.Info{Title: "Chat API", Version: "1.0.0"})
 	r := typed.New(base, typed.WithRegistry(contract))
 
-	err := typed.RegisterWithMiddleware(r, typed.Operation[createMessageInput, message]{
+	err := r.RegisterWithMiddleware(typed.Operation[createMessageInput, message]{
 		Method:        http.MethodPost,
 		Path:          "/v1/rooms/{roomId}/messages",
 		OperationID:   "createMessage",
@@ -223,7 +223,7 @@ Generated Go struct schemas are closed with `additionalProperties: false` by
 default. `WithUnknownJSONFieldsAllowed` changes both decoding and generated
 schemas to allow undeclared properties.
 
-Use `typed.RegisterRaw` with an explicit `openapi.Operation` for endpoints that
+Use `r.RegisterRaw` with an explicit `openapi.Operation` for endpoints that
 must retain raw `net/http` semantics, including SSE, multipart uploads,
 reverse proxies, and WebSocket upgrades. Raw handlers are never buffered by
 the typed codec. See [Typed handlers and contracts](docs/typed-openapi.md) for
@@ -232,10 +232,11 @@ the complete API.
 The generated `/openapi.yaml` is deterministic YAML 1.2. Both serializers stay
 dependency-free.
 
-`RegisterWithMiddleware` wraps the generated handler and runs its middleware
+`(*typed.Router).RegisterWithMiddleware` wraps the generated handler and runs its middleware
 before request binding and validation. Router-level middleware remains
 outermost. Raw operations have matching `RegisterRawWithMiddleware` and
-`MustRegisterRawWithMiddleware` functions.
+`MustRegisterRawWithMiddleware` methods. The package-level registration
+functions remain available as compatibility wrappers.
 
 ## Middleware
 
@@ -400,9 +401,8 @@ bucket intended for external API calls.
 
 ## Go versions
 
-The module requires Go 1.24.1 or newer. Go 1.26.5 is the preferred development
-toolchain, declared separately in `go.mod`, so consumers on the existing
-minimum remain supported.
+The module requires Go 1.27.0 or newer. Typed registration uses generic methods
+introduced in Go 1.27, and CI verifies the module with Go 1.27.0.
 
 See the [official Go downloads](https://go.dev/dl/) for toolchain installers.
 
@@ -421,9 +421,7 @@ go test -cover ./...
 Compatibility can be checked with explicit toolchains:
 
 ```bash
-GOTOOLCHAIN=go1.24.1 go test ./...
-GOTOOLCHAIN=go1.25.7 go test ./...
-GOTOOLCHAIN=go1.26.5 go test ./...
+GOTOOLCHAIN=go1.27.0 go test ./...
 ```
 
 The module, including its typed and OpenAPI packages, has no runtime

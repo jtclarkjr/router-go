@@ -7,10 +7,9 @@ core router's middleware or handler model.
 ## Registration API
 
 ```go
-func Register[I, O any](
-	r *typed.Router,
-	op typed.Operation[I, O],
-	h typed.Handler[I, O],
+func (r *Router) Register[I, O any](
+	op Operation[I, O],
+	h Handler[I, O],
 ) error
 
 type Handler[I, O any] func(
@@ -19,14 +18,18 @@ type Handler[I, O any] func(
 ) (typed.Response[O], error)
 ```
 
+Registration is receiver-oriented, so `I` and `O` are inferred from the
+operation and handler. The package-level `typed.Register*` functions remain
+available as compatibility wrappers.
+
 `RegisterWithMiddleware` wraps an operation handler before typed request
 binding. Router-level middleware remains outermost. This preserves
 authentication-first behavior for APIs that must return 401/403 before
 reporting malformed request bodies. Raw operations have matching
-`RegisterRawWithMiddleware` and `MustRegisterRawWithMiddleware` functions.
+`RegisterRawWithMiddleware` and `MustRegisterRawWithMiddleware` methods.
 
 ```go
-typed.RegisterWithMiddleware(r, typed.Operation[updateInput, updateOutput]{
+r.RegisterWithMiddleware(typed.Operation[updateInput, updateOutput]{
 	Method: http.MethodPut,
 	Path:   "/v1/items/{id}",
 }, updateItem, requireAuth)
@@ -116,11 +119,11 @@ policy must opt into a custom codec.
 
 ## Raw documented operations
 
-`RegisterRaw` keeps the handler on the ordinary `net/http` path while adding
+`(*typed.Router).RegisterRaw` keeps the handler on the ordinary `net/http` path while adding
 an explicit OpenAPI operation:
 
 ```go
-err := typed.RegisterRaw(r, typed.RawOperation{
+err := r.RegisterRaw(typed.RawOperation{
 	Method: http.MethodGet,
 	Path:   "/v1/events",
 	Kind:   typed.RawSSE,

@@ -41,7 +41,7 @@ func TestRegisterBindsValidatesAndDocuments(t *testing.T) {
 	registry := openapi.New(openapi.Info{Title: "Chat", Version: "0.7.0"})
 	r := typed.New(base, typed.WithRegistry(registry))
 
-	err := typed.Register(r, typed.Operation[createMessageInput, messageOutput]{
+	err := r.Register(typed.Operation[createMessageInput, messageOutput]{
 		Method:             http.MethodPost,
 		Path:               "/rooms/{roomId}/messages",
 		OperationID:        "createMessage",
@@ -172,7 +172,7 @@ func TestDirectBodyNoBodyAndCustomCodec(t *testing.T) {
 		http.Error(w, "custom: "+err.Error(), http.StatusTeapot)
 	})
 	r := typed.New(router.NewRouter(), typed.WithErrorCodec(codec))
-	typed.MustRegister(r, typed.Operation[directBody, typed.NoBody]{
+	r.MustRegister(typed.Operation[directBody, typed.NoBody]{
 		Method: http.MethodDelete,
 		Path:   "/resource",
 	}, func(_ *http.Request, input directBody) (typed.Response[typed.NoBody], error) {
@@ -353,7 +353,7 @@ func TestTypedRegistrationRejectsNonJSONCodec(t *testing.T) {
 
 func TestRegisterRawDocumentsSSEWithoutBuffering(t *testing.T) {
 	r := typed.New(router.NewRouter())
-	err := typed.RegisterRaw(r, typed.RawOperation{
+	err := r.RegisterRaw(typed.RawOperation{
 		Method: http.MethodGet,
 		Path:   "/events",
 		Kind:   typed.RawSSE,

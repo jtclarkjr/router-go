@@ -29,7 +29,7 @@ func TestOperationMiddlewareRunsBeforeTypedBinding(t *testing.T) {
 	type input struct {
 		Name string `json:"name" validate:"required"`
 	}
-	if err := typed.RegisterWithMiddleware(r, typed.Operation[input, typed.NoBody]{
+	if err := r.RegisterWithMiddleware(typed.Operation[input, typed.NoBody]{
 		Method: http.MethodPost,
 		Path:   "/typed",
 	}, func(*http.Request, input) (typed.Response[typed.NoBody], error) {
@@ -59,7 +59,7 @@ func TestOperationMiddlewareCanEnrichTypedRequestContext(t *testing.T) {
 			next.ServeHTTP(w, req.WithContext(ctx))
 		})
 	}
-	if err := typed.RegisterWithMiddleware(r, typed.Operation[typed.Empty, typed.NoBody]{
+	if err := r.RegisterWithMiddleware(typed.Operation[typed.Empty, typed.NoBody]{
 		Method: http.MethodGet,
 		Path:   "/context",
 	}, func(req *http.Request, _ typed.Empty) (typed.Response[typed.NoBody], error) {
@@ -87,7 +87,7 @@ func TestRawOperationMiddleware(t *testing.T) {
 			next.ServeHTTP(w, req)
 		})
 	}
-	err := typed.RegisterRawWithMiddleware(r, typed.RawOperation{
+	err := r.RegisterRawWithMiddleware(typed.RawOperation{
 		Method: http.MethodGet,
 		Path:   "/raw",
 		Kind:   typed.RawHTTP,
